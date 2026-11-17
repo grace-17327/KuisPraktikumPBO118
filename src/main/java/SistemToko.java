@@ -1,13 +1,7 @@
 
-import java.io.BufferedReader;
-import java.io.FileReader;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.io.ObjectOutputStream;
-import java.io.FileOutputStream;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.TreeSet;
+
+import java.io.*;
+import java.util.*;
 
 public class SistemToko {
 
@@ -24,191 +18,123 @@ public class SistemToko {
     }
 
     public void tambahPelanggan(String id, String nama) {
-        Pelanggan pelanggan = new Pelanggan(id, nama);
-        daftarPelanggan.put(id, pelanggan);
+        daftarPelanggan.put(id, new Pelanggan(id, nama));
     }
 
     public void tambahProduk(String id, String nama, int stok) {
-        Produk produk;
-
         switch (id) {
             case "OBJ-A":
-                produk = new ProdukElektronik(id, nama, stok);
+                daftarProduk.put(id, new ProdukElektronik(id, nama, stok));
                 break;
             case "OBJ-B":
-                produk = new ProdukPakaian(id, nama, stok);
+                daftarProduk.put(id, new ProdukPakaian(id, nama, stok));
                 break;
             case "OBJ-C":
-                produk = new ProdukMakanan(id, nama, stok);
+                daftarProduk.put(id, new ProdukMakanan(id, nama, stok));
                 break;
             default:
-                produk = new ProdukMakanan(id, nama, stok);
-                break;
+                System.out.println("Jenis produk tidak dikenal: " + id);
         }
-
-        daftarProduk.put(id, produk);
     }
 
-    public void jalankanTransaksiDariFile(String namaFile)
-            throws IOException {
+    public void jalankanTransaksiDariFile(String namaFile) throws Exception {
 
-        try (BufferedReader reader =
-                new BufferedReader(new FileReader(namaFile))) {
+        try (BufferedReader reader = new BufferedReader(new FileReader(namaFile))) {
 
-            String baris;
+            String isiFile = reader.readLine();
 
-            while ((baris = reader.readLine()) != null) {
+            if (isiFile == null || isiFile.trim().isEmpty()) {
+                throw new IOException("File transaksi kosong!");
+            }
 
-                String[] dataTransaksi = baris.split("\\|");
+            String[] daftarData = isiFile.split("\\|");
 
-                for (String data : dataTransaksi) {
-                    if (data.trim().isEmpty()) {
-                        continue;
-                    }
+            for (String data : daftarData) {
+                try {
+                    String[] bagian = data.split("/");
 
-                    try {
-                        String[] bagian = data.split("/");
+                    String idPelanggan = bagian[0].substring(3);
+                    String idProduk = bagian[1].substring(3);
+                    int jumlah = Integer.parseInt(bagian[2].substring(4));
 
-                        String idPelanggan =
-                                bagian[0].substring(3);
+                    prosesTransaksi(idPelanggan, idProduk, jumlah);
 
-                        String idProduk =
-                                bagian[1].substring(3);
+                } catch (TransaksiException e) {
+                    System.out.println("[TRANSAKSI GAGAL] " + e.getMessage());
 
-                        int jumlah = Integer.parseInt(
-                                bagian[2].substring(4)
-                        );
-
-                        prosesTransaksi(
-                                idPelanggan,
-                                idProduk,
-                                jumlah
-                        );
-
-                    } catch (TransaksiException e) {
-                        System.out.println(
-                                "[TRANSAKSI GAGAL] " + e.getMessage()
-                        );
-                    } catch (Exception e) {
-                        System.out.println(
-                                "[FORMAT SALAH] " + data
-                        );
-                    }
+                } catch (Exception e) {
+                    System.out.println("[DATA TIDAK VALID] " + e.getMessage());
                 }
             }
+
+        } catch (IOException e) {
+            throw new IOException("Gagal membaca file: " + e.getMessage());
         }
     }
 
-    private void prosesTransaksi(
-            String idPelanggan,
-            String idProduk,
-            int jumlah
-    ) throws TransaksiException {
+    public void prosesTransaksi(String idPelanggan, String idProduk, int jumlah)
+            throws TransaksiException {
 
-        Pelanggan pelanggan =
-                daftarPelanggan.get(idPelanggan);
-
-        Produk produk =
-                daftarProduk.get(idProduk);
+        Pelanggan pelanggan = daftarPelanggan.get(idPelanggan);
+        Produk produk = daftarProduk.get(idProduk);
 
         if (pelanggan == null) {
-            throw new TransaksiException(
-                    "Pelanggan " + idPelanggan + " tidak ditemukan."
-            );
+            throw new TransaksiException("Pelanggan " + idPelanggan + " tidak ditemukan!");
         }
 
         if (produk == null) {
-            throw new TransaksiException(
-                    "Produk " + idProduk + " tidak ditemukan."
-            );
+            throw new TransaksiException("Produk " + idProduk + " tidak ditemukan!");
         }
 
         if (jumlah <= 0) {
-            throw new TransaksiException(
-                    "Jumlah pembelian harus lebih dari nol."
-            );
+            throw new TransaksiException("Jumlah pembelian harus lebih dari 0!");
         }
 
         if (produk.getStok() < jumlah) {
-            throw new TransaksiException(
-                    "Stok produk " + idProduk + " tidak mencukupi."
-            );
+            throw new TransaksiException("Stok " + produk.getNama() + " tidak mencukupi!");
         }
 
         produk.setStok(produk.getStok() - jumlah);
 
-        Transaksi transaksi =
-                new Transaksi(pelanggan, produk, jumlah);
-
+        Transaksi transaksi = new Transaksi(pelanggan, produk, jumlah);
         daftarTransaksi.add(transaksi);
 
-        System.out.println("\nTransaksi berhasil!");
+        System.out.println("[TRANSAKSI BERHASIL]");
         transaksi.tampilkanInfo();
     }
 
     public void simpanLaporanAkhir() {
 
-        try (ObjectOutputStream output =
-                new ObjectOutputStream(
-                        new FileOutputStream("snapshot.obj"))) {
+        // SERIALISASI SNAPSHOT.OBJ
+        try (ObjectOutputStream output = new ObjectOutputStream(
+                new FileOutputStream("snapshot.obj"))) {
 
             output.writeObject(daftarPelanggan);
             output.writeObject(daftarProduk);
             output.writeObject(daftarTransaksi);
 
-            System.out.println(
-                    "\nSnapshot berhasil disimpan."
-            );
+            System.out.println("Snapshot berhasil disimpan.");
 
         } catch (IOException e) {
-            System.out.println(
-                    "Gagal menyimpan snapshot: " + e.getMessage()
-            );
+            System.out.println("Gagal menyimpan snapshot: " + e.getMessage());
         }
 
-        try (FileWriter writer =
-                new FileWriter("laporan.txt")) {
+        // LAPORAN KODE ID MENGGUNAKAN KEYSET
+        try (FileWriter writer = new FileWriter("laporan.txt")) {
 
-            writer.write("=== LAPORAN " + namaToko + " ===\n");
+            TreeSet<String> semuaID = new TreeSet<>();
 
-            writer.write("\nDAFTAR ID PELANGGAN:\n");
+            semuaID.addAll(daftarPelanggan.keySet());
+            semuaID.addAll(daftarProduk.keySet());
 
-            for (String id : new TreeSet<>(
-                    daftarPelanggan.keySet())) {
+            for (String id : semuaID) {
                 writer.write(id + "\n");
             }
 
-            writer.write("\nDAFTAR ID PRODUK:\n");
-
-            for (String id : new TreeSet<>(
-                    daftarProduk.keySet())) {
-                writer.write(id + "\n");
-            }
-
-            writer.write("\nTOTAL TRANSAKSI: "
-                    + daftarTransaksi.size() + "\n");
-
-            writer.write("\nRIWAYAT TRANSAKSI:\n");
-
-            for (Transaksi transaksi : daftarTransaksi) {
-                writer.write(
-                        transaksi.getPelanggan().getIdPelanggan()
-                        + " - "
-                        + transaksi.getProduk().getIdProduk()
-                        + " - "
-                        + transaksi.getJumlah()
-                        + "\n"
-                );
-            }
-
-            System.out.println(
-                    "Laporan berhasil disimpan."
-            );
+            System.out.println("Laporan berhasil disimpan.");
 
         } catch (IOException e) {
-            System.out.println(
-                    "Gagal menyimpan laporan: " + e.getMessage()
-            );
+            System.out.println("Gagal menyimpan laporan: " + e.getMessage());
         }
     }
 }
